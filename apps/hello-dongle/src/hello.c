@@ -37,15 +37,13 @@ int write_led(u8_t id, bool value)
 
 	gpio_pin_write(gpio_led, LED_PIN, !led); /* Led is On at LOW */
 
-	return 0;
+	return sizeof(value);
 }
 
 bool read_led(u8_t id, bool *value)
 {
-	LOG_WRN("\t\t\t\tLED: %d", led);
-
 	*value = led;
-	return sizeof(led);
+	return sizeof(value);
 }
 
 void setup(void)
@@ -71,7 +69,7 @@ void loop(void)
 	int64_t current_time = k_uptime_get();
 
 	/* Toggle led after every 3 seconds */
-	if (current_time - last_toggle_time > 2000) {
+	if (current_time - last_toggle_time > 15000) {
 		led = !led;
 		gpio_pin_write(gpio_led, LED_PIN, !led); /* Update GPIO */
 		last_toggle_time = current_time;

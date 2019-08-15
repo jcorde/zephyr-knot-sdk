@@ -270,7 +270,7 @@ u8_t proxy_get_last_id(void)
 	return last_id;
 }
 
-static bool value_set(struct knot_proxy *proxy, const knot_value_type value, const u8_t len);
+static bool set_proxy_value(struct knot_proxy *proxy, const knot_value_type value, const u8_t len);
 
 /* Return knot_value_type* so it can be flagged as const  */
 const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
@@ -303,8 +303,6 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 		read_len = ((u8_t (*)(u8_t, bool*))(proxy->read_cb))
 			    (proxy->id, &read_bool);
 		read_val.val_b = read_bool;
-		LOG_WRN("\t\t\t\t\tGOT LED: %d", read_bool);
-
 		break;
 	case KNOT_VALUE_TYPE_INT:
 		read_len = ((u8_t (*)(u8_t, int*))(proxy->read_cb))
@@ -329,7 +327,7 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 		return NULL;
 
 	/* Send message if proxy value is updated */
-	send_msg = value_set(proxy, read_val, read_len);
+	send_msg = set_proxy_value(proxy, read_val, read_len);
 	if (send_msg == false)
 		return NULL;
 
@@ -340,6 +338,10 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 {
 	struct knot_proxy *proxy;
+
+	u8_t expect_len; // Expected written len
+	u8_t written_len; // Written len
+	bool val_b;
 
 	if (id > last_id)
 		return -EINVAL;
@@ -364,9 +366,35 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 	 * New values sent from cloud are informed to
 	 * the user app through write callback.
 	 */
+	switch(proxy->schema.value_type) {
+	case KNOT_VALUE_TYPE_BOOL:
+		val_b = value->val_b;
+		expect_len = sizeof(bool);
+		written_len = ((u8_t (*)(u8_t, bool))(proxy->write_cb))
+			       (proxy->id, val_b);
+		break;
+	case KNOT_VALUE_TYPE_INT:
+		expect_len = sizeof(int);
+		written_len = ((u8_t (*)(u8_t, int))(proxy->write_cb))
+			       (proxy->id, value->val_i);
+		break;
+	case KNOT_VALUE_TYPE_FLOAT:
+		expect_len = sizeof(float);
+		written_len = ((u8_t (*)(u8_t, float))(proxy->write_cb))
+			       (proxy->id, value->val_f);
+		break;
+	case KNOT_VALUE_TYPE_RAW:
+		expect_len = value_len;
+		written_len = ((u8_t (*)(u8_t, char*, u8_t))(proxy->write_cb))
+			       (proxy->id, (char*)value->raw, value_len);
+		break;
+	default:
+		return false;
+	}
 
-	// proxy->write_cb(proxy);
-	return 0;
+	/* Sign write failure if expected len not completed */
+	if (written_len != expect_len)
+		return -EAGAIN;
 
 	return proxy->olen;
 }
@@ -417,8 +445,8 @@ static bool check_timeout(struct knot_proxy *proxy)
 	return false;
 }
 
-static bool value_set(struct knot_proxy *proxy,
-		      const knot_value_type value, u8_t len)
+static bool set_proxy_value(struct knot_proxy *proxy,
+			    const knot_value_type value, u8_t len)
 {
 	bool change;
 	bool upper;
@@ -439,7 +467,6 @@ static bool value_set(struct knot_proxy *proxy,
 	switch(proxy->schema.value_type) {
 	case KNOT_VALUE_TYPE_BOOL:
 		bval = value.val_b;
-		LOG_WRN("\t\t\t\t\tSET LED: %d", bval);
 		change = check_bool_change(proxy, bval);
 
 		if (proxy->send || timeout || change) {
@@ -497,48 +524,4 @@ static bool value_set(struct knot_proxy *proxy,
 	}
 done:
 	return ret;
-}
-
-bool knot_proxy_value_get_basic(struct knot_proxy *proxy, void *value)
-{
-	bool *bval;
-	s32_t *s32val;
-	float *fval;
-
-	if (unlikely(!proxy))
-		return false;
-
-	switch(proxy->schema.value_type) {
-	case KNOT_VALUE_TYPE_BOOL:
-		bval = (bool *) value;
-		*bval = proxy->value.val_b;
-		break;
-	case KNOT_VALUE_TYPE_INT:
-		s32val = (s32_t *) value;
-		*s32val = proxy->value.val_i;
-		break;
-	case KNOT_VALUE_TYPE_FLOAT:
-		fval = (float *) value;
-		*fval = proxy->value.val_f;
-		break;
-	default:
-		return false;
-	}
-
-	return true;
-}
-
-bool knot_proxy_value_get_string(struct knot_proxy *proxy,
-				 char *value, int len, int *olen)
-{
-	if (unlikely(!proxy))
-		return false;
-
-	if (proxy->schema.value_type != KNOT_VALUE_TYPE_RAW)
-		return false;
-
-	*olen = MIN(len, proxy->rlen);
-	memcpy(value, proxy->value.raw, *olen);
-
-	return true;
 }
