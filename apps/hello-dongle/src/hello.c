@@ -43,7 +43,7 @@ int write_led(u8_t id, bool value)
 bool read_led(u8_t id, bool *value)
 {
 	*value = led;
-	return sizeof(value);
+	return sizeof(led);
 }
 
 void setup(void)
