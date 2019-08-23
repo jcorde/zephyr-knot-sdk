@@ -5,6 +5,15 @@
  */
 
 /*
+ * Callback functions that can be called so the data item value can be updated
+ * before/after being read/written.
+ */
+#define KNOT_CALLBACK_SUCCESS	 0  // Able to read/write value
+#define KNOT_CALLBACK_FAIL		-1  // Failed to read/write value
+
+typedef int (*knot_callback_t) (int id);
+
+/*
  * Similar to Arduino:
  * setup() is called once and loop() is always called at idle state.
  * Sensors and actuators should be registered at setup() function
@@ -15,10 +24,11 @@
 void setup(void);
 void loop(void);
 
-/* Creates object to track and update data items */
+/* Set knot to track and update data items */
 int knot_data_register(u8_t id, const char *name,
 		       u16_t type_id, u8_t value_type, u8_t unit,
-		       void *write_cb, void *read_cb);
+		       knot_callback_t write_cb, knot_callback_t read_cb,
+		       void *target, u8_t *target_len);
 
 /*
  * This fuction configures which events should send proxy value to cloud

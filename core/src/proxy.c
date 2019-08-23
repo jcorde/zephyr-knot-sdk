@@ -65,6 +65,10 @@ static struct knot_proxy {
 	/* Data values */
 	knot_value_type		value;
 
+	/* Watched/Controlled variable */
+	void			*target;
+	size_t			*target_len;  // Used for strings
+
 	/* Control variable to send data */
 	bool			send; /* 'value' must be sent */
 	bool			wait_resp; /* Will send 'value' until resp */
@@ -79,8 +83,8 @@ static struct knot_proxy {
 	/* Time values */
 	u32_t			last_timeout;
 
-	void			*read_cb; /* Poll for local changes */
-	void			*write_cb; /* Report new value to user app */
+	knot_callback_t		read_cb; /* Poll for local changes */
+	knot_callback_t		write_cb; /* Report new value to user app */
 } proxy_pool[CONFIG_KNOT_THING_DATA_MAX];
 
 static u8_t last_id = 0xff;
@@ -102,7 +106,8 @@ void proxy_stop(void)
 
 int knot_data_register(u8_t id, const char *name,
 		       u16_t type_id, u8_t value_type, u8_t unit,
-		       void *write_cb, void *read_cb)
+		       knot_callback_t write_cb, knot_callback_t read_cb,
+		       void *target, u8_t *target_len)
 {
 	struct knot_proxy *proxy;
 
@@ -121,6 +126,20 @@ int knot_data_register(u8_t id, const char *name,
 		return 0xff;
 	}
 
+	/* Has value? */
+	if (unlikely(!value)) {
+		LOG_ERR("Register for ID %d failed: "
+			"Null value pointer", id);
+		return 0xff;
+	}
+
+	/* Has value length for Raw type? */
+	if (value_type == KNOT_VALUE_TYPE_RAW && unlikely(!value_len)) {
+		LOG_ERR("Register for ID %d failed: "
+			"No value_len assigned for raw type", id);
+		return 0xff;
+	}
+
 	/* Basic field validation */
 	if (knot_schema_is_valid(type_id, value_type, unit) != 0 || !name) {
 		LOG_ERR("Register for ID %d failed: "
@@ -134,6 +153,8 @@ int knot_data_register(u8_t id, const char *name,
 	proxy->schema.type_id = type_id;
 	proxy->schema.unit = unit;
 	proxy->schema.value_type = value_type;
+	proxy->target = value;
+	proxy->target_len = value_len;
 	proxy->send = false;
 	proxy->upper_flag = false;
 	proxy->lower_flag = false;
@@ -277,54 +298,62 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 {
 	struct knot_proxy *proxy;
 	knot_value_type read_val;
-	u8_t read_len;
+	size_t read_len;
 	bool send_msg;
 
 	float read_float;
 	int read_int;
 	bool read_bool;
 
+	int rc;
+
 	if (proxy_pool[id].id == 0xff)
 		return NULL;
 
 	proxy = &proxy_pool[id];
-
-	if (proxy->read_cb == NULL)
-		return NULL;
 
 	proxy->olen = 0;
 
 	/* Wait for response? */
 	proxy->wait_resp = wait_resp;
 
-	/* Typecast callback and read value */
+	/* Execute read callback if set */
+	if (proxy->read_cb != NULL) {
+		rc = proxy->read_cb(id);
+		if (rc < 0) {  // Abort if read callback failed
+			LOG_INF("Read callback failed to ID %d", id);
+			return NULL;
+		}
+	}
+
+	/* Typecast value and read it */
 	switch(proxy->schema.value_type) {
 	case KNOT_VALUE_TYPE_BOOL:
-		read_len = ((u8_t (*)(u8_t, bool*))(proxy->read_cb))
-			    (proxy->id, &read_bool);
-		read_val.val_b = read_bool;
+		read_val.val_b = *((bool*) proxy->target);
 		break;
 	case KNOT_VALUE_TYPE_INT:
-		read_len = ((u8_t (*)(u8_t, int*))(proxy->read_cb))
-			    (proxy->id, &read_int);
-		read_val.val_i = read_int;
+		read_val.val_i = *((int*) proxy->target);
 		break;
 	case KNOT_VALUE_TYPE_FLOAT:
-		read_len = ((u8_t (*)(u8_t, float*))(proxy->read_cb))
-			    (proxy->id, &read_float);
-		read_val.val_f = read_float;
+		read_val.val_f = *((float*) proxy->target);
 		break;
 	case KNOT_VALUE_TYPE_RAW:
-		read_len = ((u8_t (*)(u8_t, char*))(proxy->read_cb))
-			    (proxy->id, read_val.raw);
+		read_len = *proxy->target_len;
+		/* Check for len */
+		if (read_len <= 0 || read_len > KNOT_DATA_RAW_SIZE) {
+			LOG_ERR("Invalid target_len for ID %d", id);
+			return NULL;
+		}
+
+		/* Update and check result */
+		rc = memcpy(read_val.raw, proxy->target, read_len);
+		if (rc != read_len)
+			return NULL;
+
 		break;
 	default:
 		return NULL;
 	}
-
-	/* Return if failed to read value */
-	if (read_len == 0)
-		return NULL;
 
 	/* Send message if proxy value is updated */
 	send_msg = set_proxy_value(proxy, read_val, read_len);
@@ -446,7 +475,7 @@ static bool check_timeout(struct knot_proxy *proxy)
 }
 
 static bool set_proxy_value(struct knot_proxy *proxy,
-			    const knot_value_type value, u8_t len)
+			    const knot_value_type value, size_t len)
 {
 	bool change;
 	bool upper;
