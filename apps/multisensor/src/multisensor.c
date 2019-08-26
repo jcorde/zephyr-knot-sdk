@@ -26,7 +26,8 @@ LOG_MODULE_REGISTER(multisensor, LOG_LEVEL_DBG);
 static int thermo = 0;
 static int high_temp = 100000;
 static bool led = true;
-static char plate[] = "KNT0000";
+static char plate[] = "KNT00000000000";
+static size_t plate_len = sizeof(plate);
 
 /*
  * Use GPIO only for real boards.
@@ -60,42 +61,25 @@ static void val_update(struct k_timer *timer_id)
 K_TIMER_DEFINE(val_update_timer, val_update, NULL);
 #endif
 
-u8_t write_thermo(u8_t id, int value)
+int write_thermo(int id)
 {
-	thermo = value;
 	LOG_INF("Value for thermo with id %u changed to %d", id, thermo);
-
-	return sizeof(value);
+	return KNOT_CALLBACK_SUCCESS;
 }
 
-u8_t read_thermo(u8_t id, int *value)
+int read_thermo(int id)
 {
-	*value = thermo++;
-	return sizeof(thermo);
+	thermo++;
+	return KNOT_CALLBACK_SUCCESS;
 }
 
-u8_t changed_led(u8_t id, bool value)
+int changed_led(int id)
 {
-	led = value;
-#if CONFIG_BOARD_NRF52840_PCA10056
 	gpio_pin_write(gpiob, LED_PIN, !led); /* Led is On at LOW */
-#endif
-	return sizeof(value);
+	return KNOT_CALLBACK_SUCCESS;
 }
 
-u8_t poll_led(u8_t id, bool *value)
-{
-	*value = led;
-	return sizeof(led);
-}
-
-u8_t plate_changed(u8_t id, char *value, u8_t len)
-{
-	memcpy(plate, value, len);
-	return len;
-}
-
-u8_t random_plate(u8_t id, char *value)
+int random_plate(int id)
 {
 	int num;
 
@@ -104,8 +88,18 @@ u8_t random_plate(u8_t id, char *value)
 	plate[4] = '1' + num;
 	plate[5] = '2' + num;
 	plate[6] = '3' + num;
+	plate[7] = 'A' + num;
+	plate[8] = 'B' + num;
+	plate[9] = 'C' + num;
+	plate[10] = 'D' + num;
+	plate[11] = '2' + num;
+	plate[12] = '1' + num;
+	plate[13] = '0' + num;
 
-	memcpy(value, plate, sizeof(plate));
+	plate_len = (sys_rand32_get() % sizeof(plate)) + 1;
+	plate[plate_len - 1] = 0;
+
+	return KNOT_CALLBACK_SUCCESS;
 }
 
 void setup(void)
@@ -113,7 +107,7 @@ void setup(void)
 	/* THERMO - Sent every 5 seconds or at high temperatures */
 	knot_data_register(0, "THERMO", KNOT_TYPE_ID_TEMPERATURE,
 		      KNOT_VALUE_TYPE_INT, KNOT_UNIT_TEMPERATURE_C,
-		      write_thermo, read_thermo);
+		      write_thermo, read_thermo, &thermo, NULL);
 	knot_data_config(0,
 					KNOT_EVT_FLAG_TIME, 5,
 					KNOT_EVT_FLAG_UPPER_THRESHOLD,
@@ -122,13 +116,13 @@ void setup(void)
 	/* BUTTON - Sent after change */
 	knot_data_register(1, "LED", KNOT_TYPE_ID_SWITCH,
 		      KNOT_VALUE_TYPE_BOOL, KNOT_UNIT_NOT_APPLICABLE,
-		      changed_led, poll_led);
+		      changed_led, NULL, &led, NULL);
 	knot_data_config(1, KNOT_EVT_FLAG_CHANGE, NULL);
 
 	/* PLATE - Sent every 10 seconds */
 	knot_data_register(2, "PLATE", KNOT_TYPE_ID_NONE,
 		      KNOT_VALUE_TYPE_RAW, KNOT_UNIT_NOT_APPLICABLE,
-		      plate_changed, random_plate);
+		      NULL, random_plate, &plate, &plate_len);
 	knot_data_config(2, KNOT_EVT_FLAG_TIME, 10, NULL);
 
 	/* Peripherals control */

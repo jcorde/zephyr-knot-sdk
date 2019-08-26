@@ -107,7 +107,7 @@ void proxy_stop(void)
 int knot_data_register(u8_t id, const char *name,
 		       u16_t type_id, u8_t value_type, u8_t unit,
 		       knot_callback_t write_cb, knot_callback_t read_cb,
-		       void *target, u8_t *target_len)
+		       void *value, size_t *value_len)
 {
 	struct knot_proxy *proxy;
 
@@ -291,7 +291,7 @@ u8_t proxy_get_last_id(void)
 	return last_id;
 }
 
-static bool set_proxy_value(struct knot_proxy *proxy, const knot_value_type value, const u8_t len);
+static bool set_proxy_value(struct knot_proxy *proxy, const knot_value_type value, const size_t len);
 
 /* Return knot_value_type* so it can be flagged as const  */
 const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
@@ -300,10 +300,6 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 	knot_value_type read_val;
 	size_t read_len;
 	bool send_msg;
-
-	float read_float;
-	int read_int;
-	bool read_bool;
 
 	int rc;
 
@@ -330,12 +326,15 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 	switch(proxy->schema.value_type) {
 	case KNOT_VALUE_TYPE_BOOL:
 		read_val.val_b = *((bool*) proxy->target);
+		read_len = sizeof(bool);
 		break;
 	case KNOT_VALUE_TYPE_INT:
 		read_val.val_i = *((int*) proxy->target);
+		read_len = sizeof(int);
 		break;
 	case KNOT_VALUE_TYPE_FLOAT:
 		read_val.val_f = *((float*) proxy->target);
+		read_len = sizeof(float);
 		break;
 	case KNOT_VALUE_TYPE_RAW:
 		read_len = *proxy->target_len;
@@ -345,11 +344,7 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 			return NULL;
 		}
 
-		/* Update and check result */
-		rc = memcpy(read_val.raw, proxy->target, read_len);
-		if (rc != read_len)
-			return NULL;
-
+		memcpy(read_val.raw, proxy->target, read_len);
 		break;
 	default:
 		return NULL;
@@ -379,6 +374,12 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 
 	if (proxy->id == 0xff)
 		return -EINVAL;
+
+	// Run write callback after assigning values.
+	// Check what to do if the cb fails.
+
+	// If not retrying automattically, just sign it. Seems to be the best solution.
+	// If trying, maybe consider it was successful anyway. (But send the message telling it failed.)
 
 	if (proxy->write_cb == NULL)
 		return 0;
