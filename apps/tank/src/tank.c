@@ -30,30 +30,17 @@ LOG_MODULE_REGISTER(tank, LOG_LEVEL_DBG);
 /* Tracked value */
 float volume = 10000;
 
-u8_t write_volume(int id, float value)
-{
-	volume = value;
-	return sizeof(volume);
-}
-
-u8_t poll_volume(int id, float *value)
-{
-	volume += -5 + (sys_rand32_get() % 100001)/10000.0; // Add random value
-	*value = volume;
-
-	return sizeof(volume);
-}
-
 void setup(void)
 {
 	/* VOLUME - Sent every 5 seconds or at low volumes */
 	knot_data_register(0, "VOLUME", KNOT_TYPE_ID_VOLUME,
-						KNOT_VALUE_TYPE_FLOAT, KNOT_UNIT_VOLUME_L,
-						write_volume, poll_volume);
+			   KNOT_VALUE_TYPE_FLOAT, KNOT_UNIT_VOLUME_L,
+			   NULL, NULL, &volume, NULL);
 
 	knot_data_config(0, KNOT_EVT_FLAG_TIME, 5, NULL);
 }
 
 void loop(void)
 {
+	volume += -5 + (sys_rand32_get() % 100001)/10000.0; // Add random value
 }
