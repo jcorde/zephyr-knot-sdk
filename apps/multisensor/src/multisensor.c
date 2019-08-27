@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(multisensor, LOG_LEVEL_DBG);
 static int thermo = 0;
 static int high_temp = 100000;
 static bool led = true;
-static char plate[] = "KNT00000000000";
+static char plate[] = "KNT000";
 static size_t plate_len = sizeof(plate);
 
 /*
@@ -87,17 +87,6 @@ int random_plate(int id)
 	plate[3] = '0' + num;
 	plate[4] = '1' + num;
 	plate[5] = '2' + num;
-	plate[6] = '3' + num;
-	plate[7] = 'A' + num;
-	plate[8] = 'B' + num;
-	plate[9] = 'C' + num;
-	plate[10] = 'D' + num;
-	plate[11] = '2' + num;
-	plate[12] = '1' + num;
-	plate[13] = '0' + num;
-
-	plate_len = (sys_rand32_get() % sizeof(plate)) + 1;
-	plate[plate_len - 1] = 0;
 
 	return KNOT_CALLBACK_SUCCESS;
 }

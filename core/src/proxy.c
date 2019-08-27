@@ -301,8 +301,6 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 	size_t read_len;
 	bool send_msg;
 
-	int rc;
-
 	if (proxy_pool[id].id == 0xff)
 		return NULL;
 
@@ -314,12 +312,10 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 	proxy->wait_resp = wait_resp;
 
 	/* Execute read callback if set */
-	if (proxy->read_cb != NULL) {
-		rc = proxy->read_cb(id);
-		if (rc < 0) {  // Abort if read callback failed
-			LOG_INF("Read callback failed to ID %d", id);
-			return NULL;
-		}
+	if (proxy->read_cb != NULL &&
+	    proxy->read_cb(id) < 0) {
+		LOG_INF("Read callback failed to ID %d", id);
+		return NULL;
 	}
 
 	/* Typecast value and read it */
@@ -363,9 +359,9 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 {
 	struct knot_proxy *proxy;
 
-	u8_t expect_len; // Expected written len
-	u8_t written_len; // Written len
-	bool val_b;
+	/* Backup values */
+	knot_value_type old_value;
+	size_t old_rlen;
 
 	if (id > last_id)
 		return -EINVAL;
@@ -374,15 +370,6 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 
 	if (proxy->id == 0xff)
 		return -EINVAL;
-
-	// Run write callback after assigning values.
-	// Check what to do if the cb fails.
-
-	// If not retrying automattically, just sign it. Seems to be the best solution.
-	// If trying, maybe consider it was successful anyway. (But send the message telling it failed.)
-
-	if (proxy->write_cb == NULL)
-		return 0;
 
 	memcpy(&proxy->value, value, sizeof(*value));
 	/*
@@ -398,33 +385,83 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 	 */
 	switch(proxy->schema.value_type) {
 	case KNOT_VALUE_TYPE_BOOL:
-		val_b = value->val_b;
-		expect_len = sizeof(bool);
-		written_len = ((u8_t (*)(u8_t, bool))(proxy->write_cb))
-			       (proxy->id, val_b);
+		/* Copy without backup if no write callback set */
+		if (proxy->write_cb == NULL) {
+			*((bool*) proxy->target) = value->val_b;
+			break;
+		}
+
+		/* Store old value before trying to update */
+		old_value.val_b = *((bool*) proxy->target);
+		*((bool*) proxy->target) = value->val_b;
+
+		/* Get back to old value if write callback failed */
+		if (proxy->write_cb(id) < 0) {
+			LOG_INF("Write callback failed to ID %d", id);
+			*((bool*) proxy->target) = old_value.val_b;
+			return -EAGAIN;
+		}
 		break;
 	case KNOT_VALUE_TYPE_INT:
-		expect_len = sizeof(int);
-		written_len = ((u8_t (*)(u8_t, int))(proxy->write_cb))
-			       (proxy->id, value->val_i);
+		/* Copy without backup if no write callback set */
+		if (proxy->write_cb == NULL) {
+			*((int*) proxy->target) = value->val_i;
+			break;
+		}
+
+		/* Store old value before trying to update */
+		old_value.val_i = *((int*) proxy->target);
+		*((int*) proxy->target) = value->val_i;
+
+		/* Get back to old value if write callback failed */
+		if (proxy->write_cb(id) < 0) {
+			LOG_INF("Write callback failed to ID %d", id);
+			*((int*) proxy->target) = old_value.val_i;
+			return -EAGAIN;
+		}
 		break;
 	case KNOT_VALUE_TYPE_FLOAT:
-		expect_len = sizeof(float);
-		written_len = ((u8_t (*)(u8_t, float))(proxy->write_cb))
-			       (proxy->id, value->val_f);
+		/* Copy without backup if no write callback set */
+		if (proxy->write_cb == NULL) {
+			*((float*) proxy->target) = value->val_f;
+			break;
+		}
+
+		/* Store old value before trying to update */
+		old_value.val_f = *((float*) proxy->target);
+		*((float*) proxy->target) = value->val_f;
+
+		/* Get back to old value if write callback failed */
+		if (proxy->write_cb(id) < 0) {
+			LOG_INF("Write callback failed to ID %d", id);
+			*((float*) proxy->target) = old_value.val_f;
+			return -EAGAIN;
+		}
 		break;
 	case KNOT_VALUE_TYPE_RAW:
-		expect_len = value_len;
-		written_len = ((u8_t (*)(u8_t, char*, u8_t))(proxy->write_cb))
-			       (proxy->id, (char*)value->raw, value_len);
+		/* Copy without backup if no write callback set */
+		if (proxy->write_cb == NULL) {
+			memcpy(proxy->target, value->raw, value_len);
+			*(proxy->target_len) = value_len;
+			break;
+		}
+
+		/* Store old value before trying to update */
+		old_rlen = *(proxy->target_len);
+		memcpy(old_value.raw, proxy->target, old_rlen);
+		memcpy(proxy->target, value->raw, old_rlen);
+
+		/* Get back to old value if write callback failed */
+		if (proxy->write_cb(id) < 0) {
+			LOG_INF("Write callback failed to ID %d", id);
+			*(proxy->target_len) = old_rlen;
+			memcpy(proxy->target, old_value.raw, old_rlen);
+			return -EAGAIN;
+		}
 		break;
 	default:
 		return false;
 	}
-
-	/* Sign write failure if expected len not completed */
-	if (written_len != expect_len)
-		return -EAGAIN;
 
 	return proxy->olen;
 }
