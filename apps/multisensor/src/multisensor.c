@@ -27,7 +27,6 @@ static int thermo = 0;
 static int high_temp = 100000;
 static bool led = true;
 static char plate[] = "KNT000";
-static size_t plate_len = sizeof(plate);
 
 /*
  * Use GPIO only for real boards.
@@ -96,7 +95,7 @@ void setup(void)
 	/* THERMO - Sent every 5 seconds or at high temperatures */
 	knot_data_register(0, "THERMO", KNOT_TYPE_ID_TEMPERATURE,
 		      KNOT_VALUE_TYPE_INT, KNOT_UNIT_TEMPERATURE_C,
-		      write_thermo, read_thermo, &thermo, sizeof(thermo), NULL);
+		      write_thermo, read_thermo, &thermo, sizeof(thermo));
 	knot_data_config(0,
 			 KNOT_EVT_FLAG_TIME, 5,
 			 KNOT_EVT_FLAG_UPPER_THRESHOLD, high_temp, NULL);
@@ -104,14 +103,13 @@ void setup(void)
 	/* BUTTON - Sent after change */
 	knot_data_register(1, "LED", KNOT_TYPE_ID_SWITCH,
 			   KNOT_VALUE_TYPE_BOOL, KNOT_UNIT_NOT_APPLICABLE,
-			   changed_led, NULL, &led, sizeof(led), NULL);
+			   changed_led, NULL, &led, sizeof(led));
 	knot_data_config(1, KNOT_EVT_FLAG_CHANGE, NULL);
 
 	/* PLATE - Sent every 10 seconds */
 	knot_data_register(2, "PLATE", KNOT_TYPE_ID_NONE,
 			   KNOT_VALUE_TYPE_RAW, KNOT_UNIT_NOT_APPLICABLE,
-			   NULL,random_plate,
-			   &plate, sizeof(plate), &plate_len);
+			   NULL,random_plate, &plate, sizeof(plate));
 	knot_data_config(2, KNOT_EVT_FLAG_TIME, 10, NULL);
 
 	/* Peripherals control */

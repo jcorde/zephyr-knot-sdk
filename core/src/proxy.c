@@ -51,9 +51,7 @@ LOG_MODULE_DECLARE(knot, CONFIG_KNOT_LOG_LEVEL);
 
 #define check_raw_change(proxy, rawval, rawlen)	\
 	(KNOT_EVT_FLAG_CHANGE & proxy->config.event_flags \
-	&& ( proxy->rlen != rawlen \
-	     || memcmp(proxy->value.raw, rawval, rawlen) != 0) \
-	   )
+	&& memcmp(proxy->value.raw, rawval, rawlen) != 0)
 
 static struct knot_proxy {
 	/* KNoT identifier */
@@ -67,8 +65,7 @@ static struct knot_proxy {
 
 	/* Watched/Controlled variable */
 	void			*target;
-	size_t			 target_buf_len;
-	size_t			*target_len;  // Used for strings
+	size_t			 target_len;
 
 	/* Control variable to send data */
 	bool			send; /* 'value' must be sent */
@@ -76,7 +73,6 @@ static struct knot_proxy {
 	bool 			upper_flag; /* Upper limit crossed */
 	bool 			lower_flag; /* Lower limit crossed */
 	u8_t			olen; /* Amount to send / Output: temporary */
-	u8_t			rlen; /* Length RAW value */
 
 	/* Config values */
 	knot_config		config;
@@ -108,7 +104,7 @@ void proxy_stop(void)
 int knot_data_register(u8_t id, const char *name,
 		       u16_t type_id, u8_t value_type, u8_t unit,
 		       knot_callback_t write_cb, knot_callback_t read_cb,
-		       void *value, size_t value_buf_len, size_t *value_len)
+		       void *value, size_t value_len)
 {
 	struct knot_proxy *proxy;
 
@@ -134,42 +130,35 @@ int knot_data_register(u8_t id, const char *name,
 		return 0xff;
 	}
 
-	/* Has value length for Raw type? */
-	if (value_type == KNOT_VALUE_TYPE_RAW && unlikely(!value_len)) {
-		LOG_ERR("Register for ID %d failed: "
-			"No value_len assigned for raw type", id);
-		return 0xff;
-	}
-
 	/* Compatible buffer length? */
 	switch(value_type) {
 	case KNOT_VALUE_TYPE_BOOL:
-		if (value_buf_len == sizeof(bool))
+		if (value_len == sizeof(bool))
 			break;
 		LOG_ERR("Register for ID %d failed: "
-			"Incompatible value_buf_len %d for type "
-			"KNOT_VALUE_TYPE_BOOL", id, value_buf_len);
+			"Incompatible value_len %d for type "
+			"KNOT_VALUE_TYPE_BOOL", id, value_len);
 		return 0xff;
 	case KNOT_VALUE_TYPE_INT:
-		if (value_buf_len == sizeof(int))
+		if (value_len == sizeof(int))
 			break;
 		LOG_ERR("Register for ID %d failed: "
-			"Incompatible value_buf_len %d for type "
-			"KNOT_VALUE_TYPE_INT", id, value_buf_len);
+			"Incompatible value_len %d for type "
+			"KNOT_VALUE_TYPE_INT", id, value_len);
 		return 0xff;
 	case KNOT_VALUE_TYPE_FLOAT:
-		if (value_buf_len == sizeof(float))
+		if (value_len == sizeof(float))
 			break;
 		LOG_ERR("Register for ID %d failed: "
-			"Incompatible value_buf_len %d for type "
-			"KNOT_VALUE_TYPE_FLOAT", id, value_buf_len);
+			"Incompatible value_len %d for type "
+			"KNOT_VALUE_TYPE_FLOAT", id, value_len);
 		return 0xff;
 	case KNOT_VALUE_TYPE_RAW:
-		if (value_buf_len > 0 && value_buf_len <= KNOT_DATA_RAW_SIZE)
+		if (value_len > 0 && value_len <= KNOT_DATA_RAW_SIZE)
 			break;
 		LOG_ERR("Register for ID %d failed: "
-			"Incompatible value_buf_len %d for type "
-			"KNOT_VALUE_TYPE_RAW", id, value_buf_len);
+			"Incompatible value_len %d for type "
+			"KNOT_VALUE_TYPE_RAW", id, value_len);
 		return 0xff;
 	default:
 		LOG_ERR("Register for ID %d failed: "
@@ -191,7 +180,6 @@ int knot_data_register(u8_t id, const char *name,
 	proxy->schema.unit = unit;
 	proxy->schema.value_type = value_type;
 	proxy->target = value;
-	proxy->target_buf_len = value_buf_len;
 	proxy->target_len = value_len;
 	proxy->send = false;
 	proxy->upper_flag = false;
@@ -336,7 +324,6 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 {
 	struct knot_proxy *proxy;
 	knot_value_type read_val;
-	size_t read_len;
 	bool send_msg;
 
 	if (proxy_pool[id].id == 0xff)
@@ -360,32 +347,22 @@ const knot_value_type *proxy_read(u8_t id, u8_t *olen, bool wait_resp)
 	switch(proxy->schema.value_type) {
 	case KNOT_VALUE_TYPE_BOOL:
 		read_val.val_b = *((bool*) proxy->target);
-		read_len = sizeof(bool);
 		break;
 	case KNOT_VALUE_TYPE_INT:
 		read_val.val_i = *((int*) proxy->target);
-		read_len = sizeof(int);
 		break;
 	case KNOT_VALUE_TYPE_FLOAT:
 		read_val.val_f = *((float*) proxy->target);
-		read_len = sizeof(float);
 		break;
 	case KNOT_VALUE_TYPE_RAW:
-		read_len = *proxy->target_len;
-		/* Check for len */
-		if (read_len <= 0 || read_len > KNOT_DATA_RAW_SIZE) {
-			LOG_ERR("Invalid target_len for ID %d", id);
-			return NULL;
-		}
-
-		memcpy(read_val.raw, proxy->target, read_len);
+		memcpy(read_val.raw, proxy->target, proxy->target_len);
 		break;
 	default:
 		return NULL;
 	}
 
 	/* Send message if proxy value is updated */
-	send_msg = set_proxy_value(proxy, read_val, read_len);
+	send_msg = set_proxy_value(proxy, read_val, proxy->target_len);
 	if (send_msg == false)
 		return NULL;
 
@@ -399,7 +376,6 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 
 	/* Backup values */
 	knot_value_type old_value;
-	size_t old_rlen;
 
 	if (id > last_id)
 		return -EINVAL;
@@ -410,12 +386,6 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 		return -EINVAL;
 
 	memcpy(&proxy->value, value, sizeof(*value));
-	/*
-	 * Set string length if raw data. 'value_len' can be ignored for basic
-	 * types: knotd is responsible for encoding and setting payload_len.
-	 */
-	if (proxy->schema.value_type == KNOT_VALUE_TYPE_RAW)
-		proxy->rlen = value_len;
 
 	/*
 	 * New values sent from cloud are informed to
@@ -478,38 +448,37 @@ s8_t proxy_write(u8_t id, const knot_value_type *value, u8_t value_len)
 		break;
 	case KNOT_VALUE_TYPE_RAW:
 		/* Abort if buffer overflow */
-		if (value_len > proxy->target_buf_len) {
+		if (value_len > proxy->target_len) {
 			LOG_WRN("Write failed for ID %d: "
 				"Msg too big for buffer (%d > %d)",
-				id, value_len, proxy->target_buf_len);
+				id, value_len, proxy->target_len);
 			return -EFBIG;
 		}
 
 		/* Copy without backup if no write callback set */
 		if (proxy->write_cb == NULL) {
+			memset(proxy->target, 0, proxy->target_len);
 			memcpy(proxy->target, value->raw, value_len);
-			*(proxy->target_len) = value_len;
 			break;
 		}
 
 		/* Store old values */
-		old_rlen = MIN(*(proxy->target_len), KNOT_DATA_RAW_SIZE);
-		memcpy(old_value.raw, proxy->target, old_rlen);
+		memcpy(old_value.raw, proxy->target, proxy->target_len);
 
 		/* Update value */
-		*(proxy->target_len) = value_len;
+		memset(proxy->target, 0, proxy->target_len);
 		memcpy(proxy->target, value->raw, value_len);
 
 		/* Get back to old value if write callback failed */
 		if (proxy->write_cb(id) < 0) {
 			LOG_INF("Write callback failed to ID %d", id);
-			*(proxy->target_len) = old_rlen;
-			memcpy(proxy->target, old_value.raw, old_rlen);
+			memcpy(proxy->target, old_value.raw,
+			       proxy->target_len);
 			return -EAGAIN;
 		}
 		break;
 	default:
-		return false;
+		return -EINVAL;
 	}
 
 	return proxy->olen;
@@ -586,7 +555,7 @@ static bool set_proxy_value(struct knot_proxy *proxy,
 		change = check_bool_change(proxy, bval);
 
 		if (proxy->send || timeout || change) {
-			proxy->olen = sizeof(bool);
+			proxy->olen = proxy->target_len;
 			proxy->value.val_b = bval;
 			proxy->send = proxy->wait_resp;
 			ret = true;
@@ -601,7 +570,7 @@ static bool set_proxy_value(struct knot_proxy *proxy,
 		if ( proxy->send || timeout || change ||
 		    (upper && proxy->upper_flag == false) ||
 		    (lower && proxy->lower_flag == false)) {
-			proxy->olen = sizeof(int);
+			proxy->olen = proxy->target_len;
 			proxy->value.val_i = s32val;
 			proxy->send = proxy->wait_resp;
 			ret = true;
@@ -618,7 +587,7 @@ static bool set_proxy_value(struct knot_proxy *proxy,
 		if ( proxy->send || timeout || change ||
 		    (upper && proxy->upper_flag == false) ||
 		    (lower && proxy->lower_flag == false)) {
-			proxy->olen = sizeof(float);
+			proxy->olen = proxy->target_len;
 			proxy->value.val_f = fval;
 			proxy->send = proxy->wait_resp;
 			ret = true;
@@ -629,10 +598,7 @@ static bool set_proxy_value(struct knot_proxy *proxy,
 	case KNOT_VALUE_TYPE_RAW:
 		change = check_raw_change(proxy, value.raw, len);
 		if (proxy->send || change || timeout) {
-			/* len may not include null */
-			len = MIN(KNOT_DATA_RAW_SIZE, len);
 			proxy->olen = len; /* Amount to send */
-			proxy->rlen = len; /* RAW type length */
 			memcpy(proxy->value.raw, value.raw, len);
 			proxy->send = proxy->wait_resp;
 			ret = true;

@@ -35,7 +35,7 @@ void setup(void)
 	/* VOLUME - Sent every 5 seconds or at low volumes */
 	knot_data_register(0, "VOLUME", KNOT_TYPE_ID_VOLUME,
 			   KNOT_VALUE_TYPE_FLOAT, KNOT_UNIT_VOLUME_L,
-			   NULL, NULL, &volume, sizeof(volume), NULL);
+			   NULL, NULL, &volume, sizeof(volume));
 
 	knot_data_config(0, KNOT_EVT_FLAG_TIME, 5, NULL);
 }
