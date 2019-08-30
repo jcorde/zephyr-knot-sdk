@@ -30,17 +30,12 @@ LOG_MODULE_REGISTER(hello, LOG_LEVEL_DBG);
 bool led = true; 			/* Tracked value */
 struct device *gpio_led;		/* GPIO device */
 
-void write_led(struct knot_proxy *proxy)
+int write_led(int id)
 {
-	knot_proxy_value_get_basic(proxy, &led);
 	LOG_INF("Value for led changed to %d", led);
-
 	gpio_pin_write(gpio_led, LED_PIN, !led); /* Led is On at LOW */
-}
 
-void read_led(struct knot_proxy *proxy)
-{
-	knot_proxy_value_set_basic(proxy, &led);
+	return KNOT_CALLBACK_SUCCESS;
 }
 
 void setup(void)
@@ -50,11 +45,11 @@ void setup(void)
 	gpio_pin_configure(gpio_led, LED_PIN, GPIO_DIR_OUT);
 
 	/* KNoT config */
-	knot_proxy_register(0, "LED", KNOT_TYPE_ID_SWITCH,
+	knot_data_register(0, "LED", KNOT_TYPE_ID_SWITCH,
 			    KNOT_VALUE_TYPE_BOOL, KNOT_UNIT_NOT_APPLICABLE,
-			    write_led, read_led);
+			    write_led, NULL, &led, NULL);
 
-	knot_proxy_set_config(0, KNOT_EVT_FLAG_CHANGE, NULL);
+	knot_data_config(0, KNOT_EVT_FLAG_CHANGE, NULL);
 
 }
 
@@ -66,7 +61,7 @@ void loop(void)
 	int64_t current_time = k_uptime_get();
 
 	/* Toggle led after every 3 seconds */
-	if (current_time - last_toggle_time > 2000) {
+	if (current_time - last_toggle_time > 15000) {
 		led = !led;
 		gpio_pin_write(gpio_led, LED_PIN, !led); /* Update GPIO */
 		last_toggle_time = current_time;

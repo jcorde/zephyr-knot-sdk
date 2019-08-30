@@ -5,26 +5,30 @@
  */
 
 /*
+ * Callback functions that can be called so the data item value can be updated
+ * before/after being read/written.
+ */
+#define KNOT_CALLBACK_SUCCESS	 0  // Able to read/write value
+#define KNOT_CALLBACK_FAIL	-1  // Failed to read/write value
+
+typedef int (*knot_callback_t) (int id);
+
+/*
  * Similar to Arduino:
  * setup() is called once and loop() is always called at idle state.
- * Sensors and actuactors should be registered at setup() function
- * definition and loop() must NOT be blooking.
+ * Sensors and actuators should be registered at setup() function
+ * definition and loop() must NOT be blocking.
  *
  * setup() and loop() must be defined at user app context.
  */
 void setup(void);
 void loop(void);
 
-/* Proxy: Virtual representation of the remote device */
-struct knot_proxy;
-
-typedef void (*knot_callback_t) (struct knot_proxy *proxy);
-
-/* Creates & tracks device changes a remote device (cloud) */
-struct knot_proxy *knot_proxy_register(u8_t id, const char *name,
-				       u16_t type_id, u8_t value_type,
-				       u8_t unit, knot_callback_t changed_cb,
-				       knot_callback_t pool_cb);
+/* Set knot to track and update data items */
+int knot_data_register(u8_t id, const char *name,
+		       u16_t type_id, u8_t value_type, u8_t unit,
+		       knot_callback_t write_cb, knot_callback_t read_cb,
+		       void *value, size_t value_len);
 
 /*
  * This fuction configures which events should send proxy value to cloud
@@ -34,20 +38,4 @@ struct knot_proxy *knot_proxy_register(u8_t id, const char *name,
  *
  * This function must end with NULL
  */
-bool knot_proxy_set_config(u8_t id, ...);
-
-/* Proxy properties */
-u8_t knot_proxy_get_id(struct knot_proxy *proxy);
-
-/* Proxy helpers to get or set sensor data at the remote */
-bool knot_proxy_value_set_basic(struct knot_proxy *proxy,
-				const void *value);
-bool knot_proxy_value_set_string(struct knot_proxy *proxy,
-				 const char *value, int len);
-
-bool knot_proxy_value_get_basic(struct knot_proxy *proxy,
-				void *value);
-bool knot_proxy_value_get_string(struct knot_proxy *proxy,
-				 char *value, int len, int *olen);
-
-
+bool knot_data_config(u8_t id, ...);
