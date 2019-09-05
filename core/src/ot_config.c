@@ -90,7 +90,7 @@ int ot_config_load(void)
 static void update_role(void)
 {
 	role = otThreadGetDeviceRole(ot_context->instance);
-	LOG_DBG("OT role: %u", role);
+	LOG_WRN("\n\n\t\tOT role: %u\n\n", role);
 
 	/* Device connected */
 	if (role != OT_DEVICE_ROLE_DISABLED && role != OT_DEVICE_ROLE_DETACHED)
@@ -198,7 +198,6 @@ int ot_config_start(void)
 	/* Enable OpenThread service */
 	LOG_DBG("Starting OpenThread service");
 
-	k_sleep(1000);
 	LOG_DBG("otIp6SetEnabled");
 	rc = otIp6SetEnabled(ot_context->instance, true);
 	if (rc) {
@@ -206,7 +205,6 @@ int ot_config_start(void)
 		return rc;
 	}
 
-	k_sleep(1000);
 	LOG_DBG("otThreadSetEnabled");
 	rc = otThreadSetEnabled(ot_context->instance, true);
 	if (rc)

@@ -159,7 +159,6 @@ static void net_thread(void)
 
 	LOG_WRN("OT Started");
 
-	k_sleep(1000);
 
 
 	#if CONFIG_NET_UDP
@@ -268,7 +267,6 @@ int net_start(struct k_pipe *p2n, struct k_pipe *n2p)
 		LOG_WRN("OT Stopped");
 
 
-		k_sleep(1000);
 
 		ret = ot_config_set();
 		if (ret) {
@@ -279,7 +277,6 @@ int net_start(struct k_pipe *p2n, struct k_pipe *n2p)
 
 		LOG_WRN("OT Set");
 
-		k_sleep(1000);
 
 
 		ret = ot_config_start();
