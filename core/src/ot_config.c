@@ -198,14 +198,12 @@ int ot_config_start(void)
 	/* Enable OpenThread service */
 	LOG_DBG("Starting OpenThread service");
 
-	LOG_DBG("otIp6SetEnabled");
 	rc = otIp6SetEnabled(ot_context->instance, true);
 	if (rc) {
 		LOG_ERR("Failed to enable IPv6 communication. (err %d)", rc);
 		return rc;
 	}
 
-	LOG_DBG("otThreadSetEnabled");
 	rc = otThreadSetEnabled(ot_context->instance, true);
 	if (rc)
 		LOG_ERR("Failed to start Thread protocol. (err %d)", rc);
@@ -220,16 +218,12 @@ int ot_config_stop(void)
 	/* Disable OpenThread service */
 	LOG_DBG("Stopping OpenThread service");
 
-
-	LOG_WRN("otIp6SetEnabled 1 ");
 	rc = otThreadSetEnabled(ot_context->instance, false);
-	LOG_WRN("otIp6SetEnabled 2 ");
 	if (rc) {
 		LOG_ERR("Failed to stop Thread protocol. (err %d)", rc);
 		return rc;
 	}
 
-	LOG_WRN("otIp6SetEnabled");
 	rc = otIp6SetEnabled(ot_context->instance, false);
 	if (rc)
 		LOG_ERR("Failed to disable IPv6 communication. (err %d)", rc);

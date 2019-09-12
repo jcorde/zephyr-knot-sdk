@@ -112,55 +112,6 @@ static void net_thread(void)
 	size_t ilen;
 	int ret;
 
-	// /* Load and set OpenThread credentials from settings */
-	// #if CONFIG_SETTINGS_OT
-	// 	ret = ot_config_init(&ot_disconn);
-	// 	if (ret) {
-	// 		LOG_ERR("Failed to init OT handler. \
-	// 		Aborting net thread");
-	// 		return;
-	// 	}
-
-	// 	ret = ot_config_load();
-	// 	if (ret) {
-	// 		LOG_ERR("Failed to load OT credentials. \
-	// 		Aborting net thread");
-	// 		return;
-	// 	}
-
-	// 	ret = ot_config_stop();
-	// 	if (ret) {
-	// 		LOG_ERR("Failed to stop OT. Aborting net thread");
-	// 		return;
-	// 	}
-	// 	LOG_WRN("OT Stopped");
-
-
-	// 	k_sleep(1000);
-
-	// 	ret = ot_config_set();
-	// 	if (ret) {
-	// 		LOG_ERR("Failed to set OT credentials. \
-	// 		Aborting net thread");
-	// 		return;
-	// 	}
-
-	// 	LOG_WRN("OT Set");
-
-	// 	k_sleep(1000);
-
-
-	// 	ret = ot_config_start();
-	// 	if (ret) {
-	// 		LOG_ERR("Failed to start OT. Aborting net thread");
-	// 		return;
-	// 	}
-	// #endif
-
-	LOG_WRN("OT Started");
-
-
-
 	#if CONFIG_NET_UDP
 		/* Start UDP layer */
 		ret = udp6_init();
@@ -247,42 +198,37 @@ int net_start(struct k_pipe *p2n, struct k_pipe *n2p)
 	#if CONFIG_SETTINGS_OT
 		ret = ot_config_init(&ot_disconn);
 		if (ret) {
-			LOG_ERR("Failed to init OT handler. \
-			Aborting net thread");
-			return;
+			LOG_ERR("Failed to init OT handler. "
+				"Aborting net thread");
+			return ret;
 		}
 
 		ret = ot_config_load();
 		if (ret) {
-			LOG_ERR("Failed to load OT credentials. \
-			Aborting net thread");
-			return;
+			LOG_ERR("Failed to load OT credentials. "
+				"Aborting net thread");
+			return ret;
 		}
 
 		ret = ot_config_stop();
 		if (ret) {
-			LOG_ERR("Failed to stop OT. Aborting net thread");
-			return;
+			LOG_ERR("Failed to stop OT. "
+				"Aborting net thread");
+			return ret;
 		}
-		LOG_WRN("OT Stopped");
-
-
 
 		ret = ot_config_set();
 		if (ret) {
-			LOG_ERR("Failed to set OT credentials. \
-			Aborting net thread");
-			return;
+			LOG_ERR("Failed to set OT credentials. "
+				"Aborting net thread");
+			return ret;
 		}
-
-		LOG_WRN("OT Set");
-
-
 
 		ret = ot_config_start();
 		if (ret) {
-			LOG_ERR("Failed to start OT. Aborting net thread");
-			return;
+			LOG_ERR("Failed to start OT. "
+				"Aborting net thread");
+			return ret;
 		}
 	#endif
 
