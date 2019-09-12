@@ -29,7 +29,7 @@
 
 		ot_partition: partition@fe000 {
 			label = "ot-storage";
-			reg = <0x000ce000 0x00002000>;
+			reg = <0x000d0000 0x00004000>;
 		};
 		/* Nordic nRF5 bootloader <0xe0000 0x1c000>
 		 *
