@@ -146,7 +146,7 @@ void peripheral_set_status_period(s64_t status_period)
 
 	/* Led on at period update */
 	status_led = false;
-	gpio_pin_write(status_gpio, STATUS_LED_PIN, status_led);
+	gpio_pin_write(status_gpio, STATUS_LED_PIN, !status_led);
 
 	toggle_led_period = status_period;
 }
